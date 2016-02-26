@@ -1,6 +1,7 @@
 import ipdb, tensorflow as tf, numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score, accuracy_score
+from sklearn.preprocessing import LabelBinarizer
 from tensorflow.examples.tutorials.mnist import input_data
 from process_data import *
 
@@ -52,29 +53,20 @@ class RidgeRegression(BaseEstimator):
 
 class LogisticRegression(BaseEstimator):
     def __init__(self, n_epoch = 10, batch_size = 128, l1_penalty = 0., 
-            l2_penalty = 0., verbose = 0):
+            l2_penalty = 0., seed = 1, verbose = 0):
         self.n_epoch = n_epoch
         self.batch_size = batch_size
         self.l2_penalty = l2_penalty
+        self.seed = seed
         self.verbose = verbose
-
-    def fit(self, X = None, Y = None, data_function = None):
-        if X is None:
-            X, Y = data_function.train.next_batch(self.batch_size)
-            n = data_function.train.num_examples
-        else: n = X.shape[0]
-        assert len(X.shape) == 2
-        assert len(X) == len(Y)
-        np.random.seed(1)
-        p = X.shape[1]
         
-        if len(Y.shape) == 1:
-            YY = np.zeros((n,2))
-            YY[:,0] = 1 - Y
-            YY[:,1] = Y
-            Y = YY
-
-        q = Y.shape[1]
+    def fit(self, X = None, Y = None, data_function = None):
+        np.random.seed(self.seed)
+        if data_function is None:
+            if len(Y.shape) == 1: Y = np.c_[1 - Y, Y]
+            data_function = SplitDataBatch(X, Y)
+        n, p = data_function.train.images.shape
+        q = data_function.train.labels.shape[1]
         x = tf.placeholder(tf.float32, [None, p])
         W = tf.Variable(tf.random_normal([p, q]))
         b = tf.Variable(tf.zeros([q]))
@@ -91,28 +83,20 @@ class LogisticRegression(BaseEstimator):
         sess.run(init)
         n_iter = self.n_epoch * (n / self.batch_size)
         for i in xrange(n_iter):
-            if data_function is None:
-                sample = np.random.randint(n, size = self.batch_size)
-                sess.run(train_step, feed_dict = {x: X[sample], 
-                                              y: Y[sample]})
-                if self.verbose and (i % (n / self.batch_size) == 0):
-                    print(sess.run(cross_entropy, feed_dict = {x: X[sample],
-                                                       y: Y[sample]}))
-            else:
-                batch_xs, batch_ys = data_function.train.next_batch(
-                        self.batch_size)
-                sess.run(train_step, feed_dict={x: batch_xs, y: batch_ys})
-                if self.verbose and (i % (n / self.batch_size) == 0):
-                    print(sess.run(cross_entropy, feed_dict = 
-                        {x: data_function.validation.images, 
-                         y: data_function.validation.labels}))
+            batch_xs, batch_ys = data_function.train.next_batch(
+                    self.batch_size)
+            sess.run(train_step, feed_dict={x: batch_xs, y: batch_ys})
+            if self.verbose and (i % (n / self.batch_size) == 0):
+                print(sess.run(cross_entropy, feed_dict = 
+                    {x: data_function.validation.images, 
+                     y: data_function.validation.labels}))
         self.W = sess.run(W)
         self.b = sess.run(b)
 
     def predict(self, Xtest):
         sess = tf.Session()
         p = sess.run(tf.nn.softmax(Xtest.dot(self.W) + self.b))
-        return np.argmax(p, axis = 1)
+        return LabelBinarizer().fit_transform(np.argmax(p, axis = 1))
 
     def score(self, Xtest, ytest):
         yhat = self.predict(Xtest)

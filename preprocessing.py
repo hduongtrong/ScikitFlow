@@ -1,3 +1,5 @@
+import numpy as np
+
 class ProcessBatch():
     def __init__(self, X, Y):
         self.index = 0
