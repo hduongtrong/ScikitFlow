@@ -27,7 +27,7 @@ class SplitDataBatch():
         n1 = int(n * (1 - valid_ratio - test_ratio))
         n2 = int(n * (1 - test_ratio))
         self.train = ProcessBatch(X[:n1], Y[:n1])
-        self.valid = ProcessBatch(X[n1:n2], Y[n1:n2])
+        self.validation = ProcessBatch(X[n1:n2], Y[n1:n2])
         self.test  = ProcessBatch(X[n2:], Y[n2:])
 
 if __name__ == '__main__':

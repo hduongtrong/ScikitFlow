@@ -1,9 +1,34 @@
-import ipdb, tensorflow as tf, numpy as np
+import ipdb, logging, tensorflow as tf, numpy as np
 from sklearn.base import BaseEstimator
 from sklearn.metrics import r2_score, accuracy_score
 from sklearn.preprocessing import LabelBinarizer
 from tensorflow.examples.tutorials.mnist import input_data
-from process_data import *
+from preprocessing import SplitDataBatch
+
+try:
+    logger
+except NameError:
+    logging.basicConfig(format="[%(asctime)s] %(levelname)s\t%(message)s",
+            filename="history.log", 
+            filemode='a', level=logging.DEBUG,
+            datefmt='%m/%d/%y %H:%M:%S')
+    formatter = logging.Formatter("[%(asctime)s] %(levelname)s\t%(message)s",
+            datefmt='%m/%d/%y %H:%M:%S')
+    console = logging.StreamHandler()
+    console.setFormatter(formatter)
+    console.setLevel(logging.INFO)
+    logging.getLogger().addHandler(console)
+    logger = logging.getLogger(__name__)
+
+def PrintMessage(epoch = -1, train_loss = 0, valid_loss = 0, valid_score = 0,
+        norm_weight = 0):
+    if epoch == -1:
+        logger.info("%6s | %10s | %10s | %10s | %10s", "Epoch", "TrainLoss",
+                "ValidLoss", "ValidScore", "NormWeight")
+    else:
+        logger.info("%6d | %10.4g | %10.4g | %10.4g | %10.4g", epoch, train_loss, 
+                valid_loss, valid_score, norm_weight)
+
 
 class LinearRegression(BaseEstimator):
     def __init__(self):
@@ -61,6 +86,7 @@ class LogisticRegression(BaseEstimator):
         self.verbose = verbose
         
     def fit(self, X = None, Y = None, data_function = None):
+        if self.verbose: PrintMessage()
         np.random.seed(self.seed)
         if data_function is None:
             if len(Y.shape) == 1: Y = np.c_[1 - Y, Y]
@@ -68,13 +94,13 @@ class LogisticRegression(BaseEstimator):
         n, p = data_function.train.images.shape
         q = data_function.train.labels.shape[1]
         x = tf.placeholder(tf.float32, [None, p])
-        W = tf.Variable(tf.random_normal([p, q]))
+        W = tf.Variable(tf.random_normal([p, q], seed = self.seed))
         b = tf.Variable(tf.zeros([q]))
 
         p = tf.nn.softmax(tf.matmul(x, W) + b)
         y = tf.placeholder(tf.float32, [None, q])
 
-        cross_entropy = -tf.reduce_sum(y * tf.log(p)) / self.batch_size + \
+        cross_entropy = -tf.reduce_sum(y * tf.log(p + 1e-9)) / self.batch_size + \
                 self.l2_penalty * tf.reduce_sum(W**2)
         train_step = tf.train.AdamOptimizer().\
                         minimize(cross_entropy)
@@ -82,26 +108,38 @@ class LogisticRegression(BaseEstimator):
         sess = tf.Session()
         sess.run(init)
         n_iter = self.n_epoch * (n / self.batch_size)
+        correct_prediction = tf.equal(tf.argmax(p,1), tf.argmax(y,1))
+        self.accuracy = tf.reduce_mean(tf.cast(correct_prediction, tf.float32))
+
         for i in xrange(n_iter):
             batch_xs, batch_ys = data_function.train.next_batch(
                     self.batch_size)
             sess.run(train_step, feed_dict={x: batch_xs, y: batch_ys})
             if self.verbose and (i % (n / self.batch_size) == 0):
-                print(sess.run(cross_entropy, feed_dict = 
-                    {x: data_function.validation.images, 
-                     y: data_function.validation.labels}))
+                self.W = sess.run(W)
+                self.b = sess.run(b)
+                train_loss = sess.run(cross_entropy, feed_dict = 
+                                {x: batch_xs,
+                                 y: batch_ys})
+                valid_loss = sess.run(cross_entropy, feed_dict = 
+                                {x: data_function.validation.images, 
+                                 y: data_function.validation.labels}) * \
+                                self.batch_size / \
+                                data_function.validation.num_examples
+                score = sess.run(self.accuracy, feed_dict={
+                    x: data_function.validation.images, 
+                    y: data_function.validation.labels})
+                norm_weight = np.mean(np.abs(self.W))
+                PrintMessage(data_function.train.epochs_completed,
+                             train_loss, valid_loss, score, norm_weight)
         self.W = sess.run(W)
         self.b = sess.run(b)
+        self.sess = sess
 
     def predict(self, Xtest):
         sess = tf.Session()
         p = sess.run(tf.nn.softmax(Xtest.dot(self.W) + self.b))
         return LabelBinarizer().fit_transform(np.argmax(p, axis = 1))
-
-    def score(self, Xtest, ytest):
-        yhat = self.predict(Xtest)
-        return accuracy_score(ytest, yhat)
-
 
 def TestOnSimulateData():
     n = 10000; p = 10
@@ -126,5 +164,5 @@ def TestOnSimulateData():
 
 if __name__ == '__main__':
     mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
-    clf = LogisticRegression(n_epoch = 10, verbose = 1)
+    clf = LogisticRegression(n_epoch = 100, verbose = 1)
     clf.fit(data_function = mnist)
