@@ -20,6 +20,20 @@ def _construct_nn(images, input_dim, hidden1_dim, hidden2_dim, output_dim):
         logits = tf.matmul(hidden2, weights) + biases
     return logits
 
+def AddLayer(input_data, input_dim, output_dim, layer_id = 0):
+    with tf.name_scope('layer' + str(layer_id)):
+        weights = tf.Variable(tf.truncated_normal([input_dim, output_dim],
+            stddev = 1. / math.sqrt(float(input_dim))), name = 'weights')
+        biases = tf.Variable(tf.zeros([output_dim]), name = 'biases')
+        output_data = tf.matmul(input_data, weights) + biases
+    return output_data
+
+def _construct_nn2(images, input_dim, hidden1_dim, hidden2_dim, output_dim):
+    hidden1 = tf.nn.relu(AddLayer(images, input_dim, hidden1_dim, 0)) 
+    hidden2 = tf.nn.relu(AddLayer(hidden1, hidden1_dim, hidden2_dim, 1))
+    logits  = AddLayer(hidden2, hidden2_dim, output_dim, 2)
+    return logits
+
 def _multinomial_loss(logits, labels):
     cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
           logits, labels, name='xentropy')
@@ -75,7 +89,7 @@ class NeuralNet():
                     shape=(None, input_dim))
             labels_placeholder = tf.placeholder(tf.float32, 
                     shape=(None, output_dim))
-            logits = _construct_nn(images_placeholder, input_dim, 
+            logits = _construct_nn2(images_placeholder, input_dim, 
                     self.hidden1_dim, self.hidden2_dim, output_dim)
             loss = loss_dict[self.loss](logits, labels_placeholder)
             score = score_dict[self.loss](logits, labels_placeholder)
@@ -108,5 +122,5 @@ class NeuralNet():
 
 if __name__ == '__main__':
     mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
-    clf = NeuralNet(n_epoch = 10, loss = 'mse')
+    clf = NeuralNet(n_epoch = 10)
     clf.fit(data_function = mnist)
