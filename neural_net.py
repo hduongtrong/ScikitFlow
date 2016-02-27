@@ -1,4 +1,4 @@
-import time, numpy as np, tensorflow as tf, os.path
+import math, time, numpy as np, tensorflow as tf, os.path
 from utils import *
 from tensorflow.examples.tutorials.mnist import input_data
 
@@ -21,26 +21,53 @@ def _construct_nn(images, input_dim, hidden1_dim, hidden2_dim, output_dim):
     return logits
 
 def _multinomial_loss(logits, labels):
-  cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
+    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
           logits, labels, name='xentropy')
-  loss = tf.reduce_mean(cross_entropy, name='xentropy_mean')
-  return loss
+    loss = tf.reduce_mean(cross_entropy, name='xentropy_mean')
+    return loss
+
+def _mean_squared_error(yhat, labels):
+    return tf.reduce_mean((labels - yhat)**2)
+
+def accuracy_score(logits, labels):
+    correct_prediction = tf.equal(tf.argmax(logits,1), 
+            tf.argmax(labels,1))
+    eval_correct = tf.reduce_mean(tf.cast(correct_prediction,
+            tf.float32))
+    return eval_correct
+
+def r2_score(yhat, labels):
+    labels_mean = tf.reduce_mean(labels)
+    return 1 - tf.reduce_mean((yhat - labels)**2) / tf.reduce_mean((labels -
+        labels_mean)**2)
 
 def training(loss):
-  tf.scalar_summary(loss.op.name, loss)
-  optimizer = tf.train.AdamOptimizer()
-  global_step = tf.Variable(0, name='global_step', trainable=False)
-  train_op = optimizer.minimize(loss, global_step=global_step)
-  return train_op
+    tf.scalar_summary(loss.op.name, loss)
+    optimizer = tf.train.AdamOptimizer()
+    global_step = tf.Variable(0, name='global_step', trainable=False)
+    train_op = optimizer.minimize(loss, global_step=global_step)
+    return train_op
 
 class NeuralNet():
     def __init__(self, batch_size = 128, hidden1_dim = 50, hidden2_dim = 50,
-                       n_epoch = 10):
-        self.batch_size = batch_size
-        self.hidden1_dim = hidden1_dim
-        self.hidden2_dim = hidden2_dim
-        self.n_epoch = 10
+                       n_epoch = 10, loss = "crossentropy"):
+        self.batch_size     = batch_size
+        self.hidden1_dim    = hidden1_dim
+        self.hidden2_dim    = hidden2_dim
+        self.n_epoch        = 10
+        self.loss = loss
     def fit(self, data_function):
+        loss_dict = {'mse'                  : _mean_squared_error,
+                     'ce'                   : _multinomial_loss,
+                     'crossentropy'         : _multinomial_loss,
+                     'cross_entropy'        : _multinomial_loss,
+                     'mean_squared_error'   : _mean_squared_error}
+        score_dict = {'mse'                 : r2_score,
+                     'ce'                   : accuracy_score,
+                     'crossentropy'         : accuracy_score,
+                     'cross_entropy'        : accuracy_score,
+                     'mean_squared_error'   : r2_score}
+        PrintMessage()
         with tf.Graph().as_default():
             n, input_dim = data_function.train.images.shape
             output_dim = data_function.validation.labels.shape[1]
@@ -50,12 +77,9 @@ class NeuralNet():
                     shape=(None, output_dim))
             logits = _construct_nn(images_placeholder, input_dim, 
                     self.hidden1_dim, self.hidden2_dim, output_dim)
-            loss = _multinomial_loss(logits, labels_placeholder)
+            loss = loss_dict[self.loss](logits, labels_placeholder)
+            score = score_dict[self.loss](logits, labels_placeholder)
             train_op = training(loss)
-            correct_prediction = tf.equal(tf.argmax(logits,1), 
-                    tf.argmax(labels_placeholder,1))
-            eval_correct = tf.reduce_mean(tf.cast(correct_prediction,
-                    tf.float32))
             summary_op = tf.merge_all_summaries()
             saver = tf.train.Saver()
             sess = tf.Session()
@@ -77,12 +101,12 @@ class NeuralNet():
                                         data_function.validation.images,
                                  labels_placeholder: 
                                         data_function.validation.labels}
-                    valid_loss, valid_score = sess.run([loss, eval_correct],
+                    valid_loss, valid_score = sess.run([loss, score],
                             feed_dict = feed_dict) 
                     PrintMessage(data_function.train.epochs_completed,
                             loss_value, valid_loss, valid_score)
 
 if __name__ == '__main__':
-    # mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
-    clf = NeuralNet(n_epoch = 10)
+    mnist = input_data.read_data_sets("MNIST_data/", one_hot=True)
+    clf = NeuralNet(n_epoch = 10, loss = 'mse')
     clf.fit(data_function = mnist)
