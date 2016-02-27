@@ -83,7 +83,7 @@ class LogisticRegression(BaseEstimator):
         p = tf.nn.softmax(tf.matmul(x, W) + b)
         y = tf.placeholder(tf.float32, [None, q])
 
-        cross_entropy = -tf.reduce_sum(y * tf.log(p + 1e-9)) / self.batch_size + \
+        cross_entropy = -tf.reduce_sum(y * tf.log(p + 1e-9)) / self.batch_size +
                 self.l2_penalty * tf.reduce_sum(W**2)
         train_step = tf.train.AdamOptimizer().\
                         minimize(cross_entropy)
@@ -112,9 +112,8 @@ class LogisticRegression(BaseEstimator):
                 score = sess.run(self.accuracy, feed_dict={
                     x: data_function.validation.images, 
                     y: data_function.validation.labels})
-                norm_weight = np.mean(np.abs(self.W))
                 PrintMessage(data_function.train.epochs_completed,
-                             train_loss, valid_loss, score, norm_weight)
+                             train_loss, valid_loss, score)
         self.W = sess.run(W)
         self.b = sess.run(b)
         self.sess = sess
