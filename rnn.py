@@ -48,6 +48,16 @@ class RNN():
                             loss_value , 0, 0)
 
 if __name__ == '__main__':
+    flags = tf.app.flags
+    FLAGS = flags.FLAGS
+    flags.DEFINE_integer('hidden_size', 100, 'Hidden Size of Neural Net')
+    flags.DEFINE_integer('num_layers', 2, 'Number of Layers of Neural Net')
+    flags.DEFINE_integer('n_step', 41000, 'Number of Iteration to run')
+    flags.DEFINE_integer('batch_size', 128, 'The Batch Size for SGD')
     niet = GetNietData()
-    clf = RNN(n_step = 41000)
+    print FLAGS.hidden_size
+    clf = RNN(  n_step          = FLAGS.n_step,
+                hidden_size     = FLAGS.hidden_size,
+                batch_size      = FLAGS.batch_size,
+                num_layers      = FLAGS.num_layers)
     clf.fit(niet)
