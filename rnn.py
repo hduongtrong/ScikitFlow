@@ -72,18 +72,20 @@ def linear(args, output_size, bias, bias_start=0.0, scope=None):
 
 class RNN():
     def __init__(self, n_step = 1000, hidden_size = 50, max_grad_norm = 5., 
-                       init_scale = .1, batch_size = 128):
+                       init_scale = .1, batch_size = 128, num_layers = 2):
         self.n_step = n_step
         self.hidden_size    = hidden_size
         self.max_grad_norm  = max_grad_norm
         self.init_scale     = init_scale
         self.batch_size     = batch_size
+        self.num_layers     = num_layers
     def fit(self, data_function):
         with tf.Graph().as_default(), tf.Session() as sess:
             n, s, p = data_function.train.X.shape
             X_pl = tf.placeholder(tf.float32, [self.batch_size, s, p])
             Y_pl = tf.placeholder(tf.float32, [self.batch_size, p])
-            cell = rnn_cell.BasicLSTMCell(self.hidden_size)
+            lstm_cell = rnn_cell.BasicLSTMCell(self.hidden_size)
+            cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * self.num_layers)
             state = cell.zero_state(self.batch_size, tf.float32)
             outputs = []
             with tf.variable_scope("RNN"):
@@ -118,4 +120,3 @@ if __name__ == '__main__':
     niet = GetNietData()
     clf = RNN(n_step = 41000)
     clf.fit(niet)
-
