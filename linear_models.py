@@ -83,7 +83,8 @@ class LogisticRegression(BaseEstimator):
         p = tf.nn.softmax(tf.matmul(x, W) + b)
         y = tf.placeholder(tf.float32, [None, q])
 
-        cross_entropy = -tf.reduce_sum(y * tf.log(p + 1e-9)) / self.batch_size +
+        cross_entropy = -tf.reduce_sum(y * tf.log(p + 1e-9)) / \
+                self.batch_size + \
                 self.l2_penalty * tf.reduce_sum(W**2)
         train_step = tf.train.AdamOptimizer().\
                         minimize(cross_entropy)

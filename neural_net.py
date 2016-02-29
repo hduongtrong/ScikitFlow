@@ -1,24 +1,6 @@
 import math, time, numpy as np, tensorflow as tf, os.path
-from utils import *
+from utils import PrintMessage, loss_dict, score_dict, training
 from tensorflow.examples.tutorials.mnist import input_data
-
-def _construct_nn(images, input_dim, hidden1_dim, hidden2_dim, output_dim):
-    with tf.name_scope('hidden1'):
-        weights = tf.Variable(tf.truncated_normal([input_dim, hidden1_dim],
-            stddev = 1. / math.sqrt(float(input_dim))), name = 'weights')
-        biases = tf.Variable(tf.zeros([hidden1_dim]), name = 'biases')
-        hidden1 = tf.nn.relu(tf.matmul(images, weights) + biases)
-    with tf.name_scope('hidden2'):
-        weights = tf.Variable(tf.truncated_normal([hidden1_dim, hidden2_dim],
-            stddev = 1. / math.sqrt(float(hidden1_dim))), name = 'weights')
-        biases = tf.Variable(tf.zeros([hidden2_dim]), name = 'biases')
-        hidden2 = tf.nn.relu(tf.matmul(hidden1, weights) + biases)
-    with tf.name_scope('softmax_linear'):
-        weights = tf.Variable(tf.truncated_normal([hidden2_dim, output_dim],
-            stddev = 1. / math.sqrt(float(hidden2_dim))), name = 'weights') 
-        biases = tf.Variable(tf.zeros([output_dim]), name = 'biases')
-        logits = tf.matmul(hidden2, weights) + biases
-    return logits
 
 def AddLayer(input_data, input_dim, output_dim, layer_id = 0):
     with tf.name_scope('layer' + str(layer_id)):
@@ -34,33 +16,13 @@ def _construct_nn2(images, input_dim, hidden1_dim, hidden2_dim, output_dim):
     logits  = AddLayer(hidden2, hidden2_dim, output_dim, 2)
     return logits
 
-def _multinomial_loss(logits, labels):
-    cross_entropy = tf.nn.softmax_cross_entropy_with_logits(
-          logits, labels, name='xentropy')
-    loss = tf.reduce_mean(cross_entropy, name='xentropy_mean')
-    return loss
-
-def _mean_squared_error(yhat, labels):
-    return tf.reduce_mean((labels - yhat)**2)
-
-def accuracy_score(logits, labels):
-    correct_prediction = tf.equal(tf.argmax(logits,1), 
-            tf.argmax(labels,1))
-    eval_correct = tf.reduce_mean(tf.cast(correct_prediction,
-            tf.float32))
-    return eval_correct
-
-def r2_score(yhat, labels):
-    labels_mean = tf.reduce_mean(labels)
-    return 1 - tf.reduce_mean((yhat - labels)**2) / tf.reduce_mean((labels -
-        labels_mean)**2)
-
-def training(loss):
-    tf.scalar_summary(loss.op.name, loss)
-    optimizer = tf.train.AdamOptimizer()
-    global_step = tf.Variable(0, name='global_step', trainable=False)
-    train_op = optimizer.minimize(loss, global_step=global_step)
-    return train_op
+def _construct_nn3(images, layer_dims):
+    hiddens = [images]
+    for i in xrange(len(layer_dims) - 2):
+        hiddens.append(tf.nn.relu(
+            AddLayer(hiddens[-1], layer_dims[i], layer_dims[i+1], i)))
+    logits = AddLayer(hiddens[-1], layer_dims[i + 1], layer_dims[i + 2],i + 1)
+    return logits
 
 class NeuralNet():
     def __init__(self, batch_size = 128, hidden1_dim = 50, hidden2_dim = 50,
@@ -71,16 +33,8 @@ class NeuralNet():
         self.n_epoch        = 10
         self.loss = loss
     def fit(self, data_function):
-        loss_dict = {'mse'                  : _mean_squared_error,
-                     'ce'                   : _multinomial_loss,
-                     'crossentropy'         : _multinomial_loss,
-                     'cross_entropy'        : _multinomial_loss,
-                     'mean_squared_error'   : _mean_squared_error}
-        score_dict = {'mse'                 : r2_score,
-                     'ce'                   : accuracy_score,
-                     'crossentropy'         : accuracy_score,
-                     'cross_entropy'        : accuracy_score,
-                     'mean_squared_error'   : r2_score}
+        # Need to add support for fit(X, Y)
+        # Also support for out of memory data
         PrintMessage()
         with tf.Graph().as_default():
             n, input_dim = data_function.train.images.shape
@@ -89,8 +43,8 @@ class NeuralNet():
                     shape=(None, input_dim))
             labels_placeholder = tf.placeholder(tf.float32, 
                     shape=(None, output_dim))
-            logits = _construct_nn2(images_placeholder, input_dim, 
-                    self.hidden1_dim, self.hidden2_dim, output_dim)
+            logits = _construct_nn3(images_placeholder, [input_dim, 
+                    self.hidden1_dim, self.hidden2_dim, output_dim])
             loss = loss_dict[self.loss](logits, labels_placeholder)
             score = score_dict[self.loss](logits, labels_placeholder)
             train_op = training(loss)
