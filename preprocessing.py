@@ -54,7 +54,26 @@ def GetNietData():
         y[i, char_indices[next_chars[i]]] = 1
     return SplitDataBatch(X, y) 
 
-
+def GetAdditionData(n = 10000):
+    s = 4
+    p = 10
+    X = np.empty((n,2*s,p), dtype = np.uint8)
+    Y = np.empty((n,s+1,p), dtype = np.uint8)
+    a = np.random.randint(low = 1000, high = 10000, size = n)
+    b = np.random.randint(low = 1000, high = 10000, size = n)
+    c = a + b
+    X = [list('%04d%04d' %(a[i], b[i])) for i in xrange(n)]
+    X = np.array(X, dtype = np.uint8)
+    Y = [list('%05d' %i) for i in c]
+    Y = np.array(Y, dtype = np.uint8)
+    XX = np.zeros((n, 2*s, p), dtype = bool)
+    YY = np.zeros((n, s+1, p), dtype = bool)
+    for i in xrange(n):
+        for j in xrange(2*s):
+            XX[i][j][X[i,j]] = True
+        for j in xrange(s + 1):
+            YY[i][j][Y[i,j]] = True
+    return SplitDataBatch(XX, YY)
 if __name__ == '_main__':
     X = np.c_[np.arange(10), np.arange(10)]
     Y = np.arange(10)
