@@ -67,13 +67,30 @@ def GetAdditionData(n = 10000):
     Y = [list('%05d' %i) for i in c]
     Y = np.array(Y, dtype = np.uint8)
     XX = np.zeros((n, 2*s, p), dtype = bool)
-    YY = np.zeros((n, s+1, p), dtype = bool)
+    YY = np.zeros((n, s+2, p+1), dtype = bool)
     for i in xrange(n):
         for j in xrange(2*s):
             XX[i][j][X[i,j]] = True
-        for j in xrange(s + 1):
-            YY[i][j][Y[i,j]] = True
+        YY[i][0][-1] = True
+        for j in xrange(1, s + 2):
+
+            YY[i][j][Y[i,j-1]] = True
     return SplitDataBatch(XX, YY)
+
+def GetPolyData(n = 10000, d = 3, seed = 1):
+    np.random.seed(seed)
+
+    X = np.empty((n, d), dtype = np.float32)
+    Y = np.empty((n, d), dtype = np.float32)
+
+    for i in xrange(n):
+        Y[i] = np.sort(np.random.uniform(low = -1, high = 1, size = d))
+        X[i] = np.polynomial.polynomial.polyfromroots(Y[i])[:-1]
+   	
+    X = X.reshape(n, d, 1)
+    Y = Y.reshape(n, d, 1)
+    return SplitDataBatch(X, Y)
+
 if __name__ == '_main__':
     X = np.c_[np.arange(10), np.arange(10)]
     Y = np.arange(10)

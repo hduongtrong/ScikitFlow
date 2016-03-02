@@ -1,17 +1,19 @@
 import numpy as np, tensorflow as tf
 from tensorflow.python.ops import seq2seq, rnn_cell, rnn
-from preprocessing import GetAdditionData
+from preprocessing import GetAdditionData, GetPolyData
 from utils import PrintMessage
 
 class Seq2Seq():
     def __init__(self, n_step = 1000, num_layers = 2, batch_size = 128, 
-            hidden_size = 50, max_grad_norm = 5, init_scale = .1):
+            hidden_size = 50, max_grad_norm = 5, init_scale = .1,
+            loss = 'ce'):
         self.n_step         = n_step
         self.num_layers     = num_layers
         self.batch_size     = batch_size
         self.hidden_size    = hidden_size
         self.max_grad_norm  = max_grad_norm
         self.init_scale     = init_scale
+        self.loss           = loss
     def fit(self, data_function):
         with tf.Graph().as_default(), tf.Session() as sess:
             n, s, p = data_function.train.X.shape
@@ -22,19 +24,20 @@ class Seq2Seq():
             cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * self.num_layers)
             _ , enc_state = rnn.rnn(cell, [X_pl[:,i,:] for i in xrange(s)],
                     dtype = tf.float32)
-            outputs, _    = seq2seq.rnn_decoder([Y_pl[:,i,:] for i in xrange(t)], 
-                                            enc_state, cell)
+            outputs, _    = seq2seq.rnn_decoder([Y_pl[:,i,:] for i in 
+                                xrange(t-1)], enc_state, cell)
             concat_outputs = tf.concat(0, outputs)
             softmax_w = tf.get_variable("softmax_w", [self.hidden_size, q])
             softmax_b = tf.get_variable("softmax_b", [q])
             logits = tf.matmul(concat_outputs, softmax_w) + softmax_b
-            print logits.get_shape()
-            labels = tf.reshape(Y_pl, [self.batch_size * t, q])
-            print labels.get_shape()
-            # loss = seq2seq.sequence_loss(logits, Y_pl, tf.ones([t])/t)
-            loss = tf.reduce_mean(
+            labels = tf.reshape(Y_pl[:,1:,:], [self.batch_size * (t-1), q])
+            if self.loss == 'ce':
+                loss = tf.reduce_mean(
                     tf.nn.softmax_cross_entropy_with_logits(logits, labels))
-            print loss.get_shape()
+            elif self.loss == 'mse':
+                loss = tf.reduce_mean((logits - labels)**2)
+            else:
+                print("Error cmnr. Loss must be either ce or mse")
             tvars = tf.trainable_variables()
             grads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),
                     self.max_grad_norm)
@@ -53,9 +56,13 @@ class Seq2Seq():
                 if i % 100 == 0:
                     PrintMessage(data_function.train.epochs_completed,
                             loss_value , 0, 0) 
-
+    
                
-if __name__ == '__main__':
+if __name__ == '__main_':
     addition_data = GetAdditionData(n = 100000)
-    clf = Seq2Seq()
+    clf = Seq2Seq(n_step = 100000)
     clf.fit(addition_data)
+if __name__ == '__main__':
+    poly_data = GetPolyData(10000, 10)
+    clf = Seq2Seq(n_step = 1000, loss = 'mse')
+    clf.fit(poly_data)
