@@ -80,12 +80,13 @@ def GetAdditionData(n = 10000):
 def GetPolyData(n = 10000, d = 3, seed = 1):
     np.random.seed(seed)
 
-    X = np.empty((n, d), dtype = np.float32)
-    Y = np.empty((n, d), dtype = np.float32)
+    X = np.zeros((n, d), dtype = np.float32)
+    Y = np.zeros((n, d + 1, 2), dtype = np.float32)
 
     for i in xrange(n):
-        Y[i] = np.sort(np.random.uniform(low = -1, high = 1, size = d))
-        X[i] = np.polynomial.polynomial.polyfromroots(Y[i])[:-1]
+        Y[i,1:,0] = np.sort(np.random.uniform(low = -1, high = 1, size = d))
+        Y[i,0,1]  = 1
+        X[i] = np.polynomial.polynomial.polyfromroots(Y[i,1:,0])[:-1]
    	
     X = X.reshape(n, d, 1)
     Y = Y.reshape(n, d, 1)
