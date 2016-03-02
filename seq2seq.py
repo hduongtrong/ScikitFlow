@@ -1,4 +1,4 @@
-import numpy as np, tensorflow as tf
+import ipdb, numpy as np, tensorflow as tf
 from tensorflow.python.ops import seq2seq, rnn_cell, rnn
 from preprocessing import GetAdditionData, GetPolyData
 from utils import PrintMessage
@@ -34,14 +34,9 @@ class Seq2Seq():
             if self.loss == 'ce':
                 loss = tf.reduce_mean(
                     tf.nn.softmax_cross_entropy_with_logits(logits, labels))
-                loss_vec = 0
             elif self.loss == 'mse':
                 loss_mat = (logits - labels)**2
                 loss     = tf.reduce_mean(loss_mat)
-                loss_vec = tf.reduce_mean(tf.reshape(tf.reduce_mean(loss_mat, 1), 
-                            [self.batch_size, t - 1]), 0)
-            else:
-                print("Error cmnr. Loss must be either ce or mse")
             tvars = tf.trainable_variables()
             grads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),
                     self.max_grad_norm)
@@ -55,11 +50,12 @@ class Seq2Seq():
                 batch_xs, batch_ys = data_function.train.next_batch(
                                         self.batch_size)
                 feed_dict = {X_pl: batch_xs, Y_pl: batch_ys}
-                _, loss_value, loss_vec = sess.run([train_op, loss, loss_vec],
+                _, loss_value = sess.run([train_op, loss],
                         feed_dict = feed_dict)
                 if i % 100 == 0:
+                    ipdb.set_trace()
                     PrintMessage(data_function.train.epochs_completed,
-                            loss_value , loss_vec[0], loss_vec[1]) 
+                            loss_value , 0, 1) 
     
                
 if __name__ == '__main_':
