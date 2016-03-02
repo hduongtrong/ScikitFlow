@@ -34,8 +34,12 @@ class Seq2Seq():
             if self.loss == 'ce':
                 loss = tf.reduce_mean(
                     tf.nn.softmax_cross_entropy_with_logits(logits, labels))
+                loss_vec = 0
             elif self.loss == 'mse':
-                loss = tf.reduce_mean((logits - labels)**2)
+                loss_mat = (logits - labels)**2
+                loss     = tf.reduce_mean(loss_mat)
+                loss_vec = tf.reduce_mean(tf.reshape(rf.reduce_mean(loss_mat, 1), 
+                            [self.batch_size, t - 1]), 0)
             else:
                 print("Error cmnr. Loss must be either ce or mse")
             tvars = tf.trainable_variables()
@@ -51,11 +55,11 @@ class Seq2Seq():
                 batch_xs, batch_ys = data_function.train.next_batch(
                                         self.batch_size)
                 feed_dict = {X_pl: batch_xs, Y_pl: batch_ys}
-                _, loss_value = sess.run([train_op, loss],
+                _, loss_value, loss_vec = sess.run([train_op, loss, loss_vec],
                         feed_dict = feed_dict)
                 if i % 100 == 0:
                     PrintMessage(data_function.train.epochs_completed,
-                            loss_value , 0, 0) 
+                            loss_value , loss_vec[0], loss_vec[1]) 
     
                
 if __name__ == '__main_':
