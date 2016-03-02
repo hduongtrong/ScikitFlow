@@ -38,7 +38,7 @@ class Seq2Seq():
             elif self.loss == 'mse':
                 loss_mat = (logits - labels)**2
                 loss     = tf.reduce_mean(loss_mat)
-                loss_vec = tf.reduce_mean(tf.reshape(rf.reduce_mean(loss_mat, 1), 
+                loss_vec = tf.reduce_mean(tf.reshape(tf.reduce_mean(loss_mat, 1), 
                             [self.batch_size, t - 1]), 0)
             else:
                 print("Error cmnr. Loss must be either ce or mse")
