@@ -63,6 +63,6 @@ if __name__ == '__main_':
     clf = Seq2Seq(n_step = 100000)
     clf.fit(addition_data)
 if __name__ == '__main__':
-    poly_data = GetPolyData(10000, 10)
-    clf = Seq2Seq(n_step = 1000, loss = 'mse')
+    poly_data = GetPolyData(100000, 10)
+    clf = Seq2Seq(n_step = 100000, num_layers = 3, hidden_size = 256, loss = 'mse')
     clf.fit(poly_data)
