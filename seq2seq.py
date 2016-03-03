@@ -2,30 +2,57 @@ import ipdb, numpy as np, tensorflow as tf
 from tensorflow.python.ops import seq2seq, rnn_cell, rnn
 from preprocessing import GetAdditionData, GetPolyData
 from utils import PrintMessage, accuracy_score, r2_score
+from tensorflow.python.ops import variable_scope
 
 
-def rnn_decoder(decoder_inputs, initial_state, cell, scope=None):
-    with tf.variable_scope(scope or "dnn_decoder"):
-        states, sampling_states = [initial_state], [initial_state]
-        outputs, sampling_outputs = [], []
-        with tf.op_scope([decoder_inputs, initial_state], "training"):
-            for i, inp in enumerate(decoder_inputs):
-                if i > 0:
-                    tf.get_variable_scope().reuse_variables()
-                output, new_state = cell(inp, states[-1])
-                outputs.append(output)
-                states.append(new_state)
-        with tf.op_scope([initial_state], "sampling"):
-            for i, _ in enumerate(decoder_inputs):
-                if i == 0:
-                    sampling_outputs.append(outputs[i])
-                    sampling_states.append(states[i])
-                else:
-                    sampling_output, sampling_state = cell(
-                        sampling_outputs[-1], sampling_states[-1])
-                    sampling_outputs.append(sampling_output)
-                    sampling_states.append(sampling_state)
-    return outputs, states, sampling_outputs, sampling_states
+def rnn_decoder(decoder_inputs, initial_state, cell, softmax_w, softmax_b,
+                scope=None):
+  """RNN decoder for the sequence-to-sequence model.
+  Args:
+    decoder_inputs: A list of 2D Tensors [batch_size x cell.input_size].
+    initial_state: 2D Tensor with shape [batch_size x cell.state_size].
+    cell: rnn_cell.RNNCell defining the cell function and size.
+    loop_function: If not None, this function will be applied to the i-th output
+      in order to generate the i+1-st input, and decoder_inputs will be ignored,
+      except for the first element ("GO" symbol). This can be used for decoding,
+      but also for training to emulate http://arxiv.org/abs/1506.03099.
+      Signature -- loop_function(prev, i) = next
+        * prev is a 2D Tensor of shape [batch_size x cell.output_size],
+        * i is an integer, the step number (when advanced control is needed),
+        * next is a 2D Tensor of shape [batch_size x cell.input_size].
+    scope: VariableScope for the created subgraph; defaults to "rnn_decoder".
+  Returns:
+    A tuple of the form (outputs, state), where:
+      outputs: A list of the same length as decoder_inputs of 2D Tensors with
+        shape [batch_size x cell.output_size] containing generated outputs.
+      state: The state of each cell at the final time-step.
+        It is a 2D Tensor of shape [batch_size x cell.state_size].
+        (Note that in some cases, like basic RNN cell or GRU cell, outputs and
+         states can be the same. They are different for LSTM cells though.)
+  """
+  with variable_scope.variable_scope(scope or "rnn_decoder"):
+    state_train = initial_state
+    state_valid = initial_state
+    outputs_train = []
+    outputs_valid = []
+    for i, inp in enumerate(decoder_inputs):
+      if i > 0:
+        variable_scope.get_variable_scope().reuse_variables()
+      output_train, state_train = cell(inp, state_train)
+      outputs_train.append(output_train)
+      if i > 0:
+        # For the next decoder input, the decoder input of train and valid are
+        # different. For train, we use the true decoder input, for test, we use
+        # the output of the previous
+        # ipdb.set_trace()
+        output_valid, state_valid = cell(tf.matmul(outputs_valid[-1],
+            softmax_w) + softmax_b, state_valid)
+      else:
+        # For the first decoder input, the decoder input of train and valid
+        # are the same, since they are both fed the decoder_input[0]
+        state_valid, output_valid  = state_train, output_train
+      outputs_valid.append(output_valid)
+  return outputs_train, state_train, outputs_valid, state_valid
 
 
 class Seq2Seq():
@@ -58,30 +85,35 @@ class Seq2Seq():
             _, t, q = data_function.train.Y.shape
             X_pl    = tf.placeholder(tf.float32, [None, s, p])
             Y_pl    = tf.placeholder(tf.float32, [None, t, q])
-            is_test = tf.placeholder(tf.int32)
-            if is_test > 512:
-                print("Motherfucker")
             lstm_cell     = rnn_cell.BasicLSTMCell(self.hidden_size)
             cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * self.num_layers)
             _ , enc_state = rnn.rnn(cell, [X_pl[:,i,:] for i in xrange(s)],
-                    dtype = tf.float32)
-            outputs, _    = seq2seq.rnn_decoder([Y_pl[:,i,:] for i in 
-                                xrange(t-1)], enc_state, cell)
-            
-            concat_outputs = tf.concat(0, outputs)
+                   dtype = tf.float32)
             softmax_w = tf.get_variable("softmax_w", [self.hidden_size, q])
             softmax_b = tf.get_variable("softmax_b", [q])
+
+            outputs, _, outputs_val, _    = rnn_decoder([Y_pl[:,i,:] for i in 
+                                xrange(t-1)], enc_state, cell,
+                                softmax_w, softmax_b)
+            
+            concat_outputs = tf.concat(0, outputs)
+            concat_outputs_val = tf.concat(0, outputs_val)
             logits = tf.matmul(concat_outputs, softmax_w) + softmax_b
+            logits_val = tf.matmul(concat_outputs_val, softmax_w) + softmax_b
             # labels = tf.reshape(tf.transpose(Y_pl[:,1:,:(q-1)]), [-1, 1])
             labels = tf.reshape(tf.transpose(Y_pl[:, 1:, :], [1,0,2]),
                     [-1, q])
             if self.loss == 'ce':
                 loss = tf.reduce_mean(
                     tf.nn.softmax_cross_entropy_with_logits(logits, labels))
-                score = accuracy(logits, labels)
+                loss_val = tf.reduce_mean(
+                    tf.nn.softmax_cross_entropy_with_logits(logits_val, labels))
+                score = accuracy(logits_val, labels)
             elif self.loss == 'mse':
                 loss = tf.reduce_mean((logits - labels)**2)
-                score = r2_score(logits, labels)
+                loss_val = tf.reduce_mean((logits_val[:,:(q-1)] - 
+                                           labels[:,:(q-1)])**2)
+                # score = r2_score(logits_val, labels)
             tvars = tf.trainable_variables()
             grads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),
                     self.max_grad_norm)
@@ -97,16 +129,14 @@ class Seq2Seq():
                 feed_dict = {X_pl: batch_xs, Y_pl: batch_ys}
                 _, loss_value = sess.run([train_op, loss],
                         feed_dict = feed_dict)
-                if i % 100 == 0:
+                if i % 100 == 99:
                     # ipdb.set_trace()
                     feed_dict = {X_pl: data_function.validation.X,
                                  Y_pl: data_function.validation.Y}
-                    loss_valid, score_valid = sess.run(
-                            [loss, score], feed_dict = feed_dict)
-                    score_valid = 1 - loss_valid /\
-                            np.mean(data_function.validation.Y[:,1:,:(q-1)]**2)
+                    loss1, loss2 = sess.run(
+                            [loss, loss_val], feed_dict = feed_dict)
                     PrintMessage(data_function.train.epochs_completed,
-                            loss_value , loss_valid, score_valid) 
+                            loss1, loss2, 0) 
     
                
 if __name__ == '_main__':
@@ -115,6 +145,6 @@ if __name__ == '_main__':
     clf = Seq2Seq(n_step = 100000, loss = 'ce')
     clf.fit(addition_data)
 if __name__ == '__main__':
-    poly_data = GetPolyData(10000, 20)
-    clf = Seq2Seq(n_step = 600000, num_layers = 2, hidden_size = 256, loss = 'mse')
+    poly_data = GetPolyData(100000, 20)
+    clf = Seq2Seq(n_step = 600000, num_layers = 3, hidden_size = 256, loss = 'mse')
     clf.fit(poly_data)
