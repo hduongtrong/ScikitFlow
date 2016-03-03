@@ -3,6 +3,31 @@ from tensorflow.python.ops import seq2seq, rnn_cell, rnn
 from preprocessing import GetAdditionData, GetPolyData
 from utils import PrintMessage, accuracy_score, r2_score
 
+
+def rnn_decoder(decoder_inputs, initial_state, cell, scope=None):
+    with tf.variable_scope(scope or "dnn_decoder"):
+        states, sampling_states = [initial_state], [initial_state]
+        outputs, sampling_outputs = [], []
+        with tf.op_scope([decoder_inputs, initial_state], "training"):
+            for i, inp in enumerate(decoder_inputs):
+                if i > 0:
+                    tf.get_variable_scope().reuse_variables()
+                output, new_state = cell(inp, states[-1])
+                outputs.append(output)
+                states.append(new_state)
+        with tf.op_scope([initial_state], "sampling"):
+            for i, _ in enumerate(decoder_inputs):
+                if i == 0:
+                    sampling_outputs.append(outputs[i])
+                    sampling_states.append(states[i])
+                else:
+                    sampling_output, sampling_state = cell(
+                        sampling_outputs[-1], sampling_states[-1])
+                    sampling_outputs.append(sampling_output)
+                    sampling_states.append(sampling_state)
+    return outputs, states, sampling_outputs, sampling_states
+
+
 class Seq2Seq():
     def __init__(self, n_step = 1000, num_layers = 2, batch_size = 128, 
             hidden_size = 50, max_grad_norm = 5, init_scale = .1,
@@ -27,8 +52,7 @@ class Seq2Seq():
         # next decoder input. Basically, we add a 0 to the vector, since for
         # the input, we have the extra dimension that denote START symbol, but
         # not for the decoder output. 
-        loop_function = lambda x, q: tf.concat(1, 
-                [x, tf.zeros_like(x[:,:1])])
+        tf.set_random_seed(1)
         with tf.Graph().as_default(), tf.Session() as sess:
             n, s, p = data_function.train.X.shape
             _, t, q = data_function.train.Y.shape
@@ -45,12 +69,12 @@ class Seq2Seq():
                                 xrange(t-1)], enc_state, cell)
             
             concat_outputs = tf.concat(0, outputs)
-            softmax_w = tf.get_variable("softmax_w", [self.hidden_size, q - 1])
-            softmax_b = tf.get_variable("softmax_b", [q - 1])
+            softmax_w = tf.get_variable("softmax_w", [self.hidden_size, q])
+            softmax_b = tf.get_variable("softmax_b", [q])
             logits = tf.matmul(concat_outputs, softmax_w) + softmax_b
             # labels = tf.reshape(tf.transpose(Y_pl[:,1:,:(q-1)]), [-1, 1])
-            labels = tf.reshape(tf.transpose(Y_pl[:, 1:, :(q-1)], [1,0,2]),
-                    [-1, q-1])
+            labels = tf.reshape(tf.transpose(Y_pl[:, 1:, :], [1,0,2]),
+                    [-1, q])
             if self.loss == 'ce':
                 loss = tf.reduce_mean(
                     tf.nn.softmax_cross_entropy_with_logits(logits, labels))
@@ -79,8 +103,8 @@ class Seq2Seq():
                                  Y_pl: data_function.validation.Y}
                     loss_valid, score_valid = sess.run(
                             [loss, score], feed_dict = feed_dict)
-                    # score_valid = 1 - loss_valid /\
-                    #        np.mean(data_function.validation.Y[:,1:,:(q-1)]**2)
+                    score_valid = 1 - loss_valid /\
+                            np.mean(data_function.validation.Y[:,1:,:(q-1)]**2)
                     PrintMessage(data_function.train.epochs_completed,
                             loss_value , loss_valid, score_valid) 
     
