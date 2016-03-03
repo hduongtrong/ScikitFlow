@@ -15,6 +15,14 @@ class Seq2Seq():
         self.init_scale     = init_scale
         self.loss           = loss
     def fit(self, data_function):
+        """ We make some important assumption about the data:
+        The Output in additional to the original dimension, has an extra
+        dimension to hold the special "START" symbol at the beginning of the
+        Decoder input. Also, the first element in Y, should be this START
+        symbol. So for example, if our output is in 2D with seq length 3: e.g. 
+        [y1, y2], [y3, y4], [y5, y6] for one sequence. Then the transformed
+        output should be [0,0,1], [y1, y2, 0], [y3, y4, 0], [y5, y6, 0]
+        """
         with tf.Graph().as_default(), tf.Session() as sess:
             n, s, p = data_function.train.X.shape
             _, t, q = data_function.train.Y.shape
@@ -30,15 +38,17 @@ class Seq2Seq():
             softmax_w = tf.get_variable("softmax_w", [self.hidden_size, q - 1])
             softmax_b = tf.get_variable("softmax_b", [q - 1])
             logits = tf.matmul(concat_outputs, softmax_w) + softmax_b
-            labels = tf.reshape(tf.transpose(Y_pl[:,1:,0]), [-1, 1])
+            # labels = tf.reshape(tf.transpose(Y_pl[:,1:,:(q-1)]), [-1, 1])
+            labels = tf.reshape(tf.transpose(Y_pl[:, 1:, :(q-1)], [1,0,2]),
+                    [-1, q-1])
+            # ipdb.set_trace()
             ## Be really careful with reshape. They might reshape in the wrong
             ## direction, i.e. row-wise instead of column-wise
             if self.loss == 'ce':
                 loss = tf.reduce_mean(
                     tf.nn.softmax_cross_entropy_with_logits(logits, labels))
             elif self.loss == 'mse':
-                loss_mat = (logits - labels)**2
-                loss     = tf.reduce_mean(loss_mat)
+                loss = tf.reduce_mean(logits - labels)**2
             tvars = tf.trainable_variables()
             grads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),
                     self.max_grad_norm)
@@ -48,7 +58,6 @@ class Seq2Seq():
             initializer = tf.random_uniform_initializer(-self.init_scale,
                                         self.init_scale)
             tf.initialize_all_variables().run()
-            PrintMessage()
             for i in xrange(self.n_step):
                 batch_xs, batch_ys = data_function.train.next_batch(
                                         self.batch_size)
@@ -61,14 +70,15 @@ class Seq2Seq():
                                  Y_pl: data_function.validation.Y}
                     loss_valid = sess.run(loss, feed_dict = feed_dict)
                     score_valid = 1 - loss_valid /\
-                    np.mean(data_function.validation.Y[:,1:,0]**2)
+                            np.mean(data_function.validation.Y[:,1:,:(q-1)]**2)
                     PrintMessage(data_function.train.epochs_completed,
                             loss_value , loss_valid, score_valid) 
     
                
-if __name__ == '__main_':
+if __name__ == '_main__':
+    print("Running Addition Data")
     addition_data = GetAdditionData(n = 100000)
-    clf = Seq2Seq(n_step = 100000)
+    clf = Seq2Seq(n_step = 100000, loss = 'ce')
     clf.fit(addition_data)
 if __name__ == '__main__':
     poly_data = GetPolyData(100000, 40)

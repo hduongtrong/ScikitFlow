@@ -57,8 +57,6 @@ def GetNietData():
 def GetAdditionData(n = 10000):
     s = 4
     p = 10
-    X = np.empty((n,2*s,p), dtype = np.uint8)
-    Y = np.empty((n,s+1,p), dtype = np.uint8)
     a = np.random.randint(low = 1000, high = 10000, size = n)
     b = np.random.randint(low = 1000, high = 10000, size = n)
     c = a + b
@@ -73,7 +71,6 @@ def GetAdditionData(n = 10000):
             XX[i][j][X[i,j]] = True
         YY[i][0][-1] = True
         for j in xrange(1, s + 2):
-
             YY[i][j][Y[i,j-1]] = True
     return SplitDataBatch(XX, YY)
 
