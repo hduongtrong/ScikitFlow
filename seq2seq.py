@@ -1,7 +1,7 @@
 import ipdb, numpy as np, tensorflow as tf
 from tensorflow.python.ops import seq2seq, rnn_cell, rnn
 from preprocessing import GetAdditionData, GetPolyData
-from utils import PrintMessage
+from utils import PrintMessage, accuracy_score, r2_score
 
 class Seq2Seq():
     def __init__(self, n_step = 1000, num_layers = 2, batch_size = 128, 
@@ -23,17 +23,27 @@ class Seq2Seq():
         [y1, y2], [y3, y4], [y5, y6] for one sequence. Then the transformed
         output should be [0,0,1], [y1, y2, 0], [y3, y4, 0], [y5, y6, 0]
         """
+        # Define function to apply to previous decoder output, to generate the
+        # next decoder input. Basically, we add a 0 to the vector, since for
+        # the input, we have the extra dimension that denote START symbol, but
+        # not for the decoder output. 
+        loop_function = lambda x, q: tf.concat(1, 
+                [x, tf.zeros_like(x[:,:1])])
         with tf.Graph().as_default(), tf.Session() as sess:
             n, s, p = data_function.train.X.shape
             _, t, q = data_function.train.Y.shape
             X_pl    = tf.placeholder(tf.float32, [None, s, p])
             Y_pl    = tf.placeholder(tf.float32, [None, t, q])
+            is_test = tf.placeholder(tf.int32)
+            if is_test > 512:
+                print("Motherfucker")
             lstm_cell     = rnn_cell.BasicLSTMCell(self.hidden_size)
             cell = tf.nn.rnn_cell.MultiRNNCell([lstm_cell] * self.num_layers)
             _ , enc_state = rnn.rnn(cell, [X_pl[:,i,:] for i in xrange(s)],
                     dtype = tf.float32)
             outputs, _    = seq2seq.rnn_decoder([Y_pl[:,i,:] for i in 
                                 xrange(t-1)], enc_state, cell)
+            
             concat_outputs = tf.concat(0, outputs)
             softmax_w = tf.get_variable("softmax_w", [self.hidden_size, q - 1])
             softmax_b = tf.get_variable("softmax_b", [q - 1])
@@ -41,14 +51,13 @@ class Seq2Seq():
             # labels = tf.reshape(tf.transpose(Y_pl[:,1:,:(q-1)]), [-1, 1])
             labels = tf.reshape(tf.transpose(Y_pl[:, 1:, :(q-1)], [1,0,2]),
                     [-1, q-1])
-            # ipdb.set_trace()
-            ## Be really careful with reshape. They might reshape in the wrong
-            ## direction, i.e. row-wise instead of column-wise
             if self.loss == 'ce':
                 loss = tf.reduce_mean(
                     tf.nn.softmax_cross_entropy_with_logits(logits, labels))
+                score = accuracy(logits, labels)
             elif self.loss == 'mse':
-                loss = tf.reduce_mean(logits - labels)**2
+                loss = tf.reduce_mean((logits - labels)**2)
+                score = r2_score(logits, labels)
             tvars = tf.trainable_variables()
             grads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),
                     self.max_grad_norm)
@@ -68,9 +77,10 @@ class Seq2Seq():
                     # ipdb.set_trace()
                     feed_dict = {X_pl: data_function.validation.X,
                                  Y_pl: data_function.validation.Y}
-                    loss_valid = sess.run(loss, feed_dict = feed_dict)
-                    score_valid = 1 - loss_valid /\
-                            np.mean(data_function.validation.Y[:,1:,:(q-1)]**2)
+                    loss_valid, score_valid = sess.run(
+                            [loss, score], feed_dict = feed_dict)
+                    # score_valid = 1 - loss_valid /\
+                    #        np.mean(data_function.validation.Y[:,1:,:(q-1)]**2)
                     PrintMessage(data_function.train.epochs_completed,
                             loss_value , loss_valid, score_valid) 
     
@@ -81,6 +91,6 @@ if __name__ == '_main__':
     clf = Seq2Seq(n_step = 100000, loss = 'ce')
     clf.fit(addition_data)
 if __name__ == '__main__':
-    poly_data = GetPolyData(100000, 40)
-    clf = Seq2Seq(n_step = 600000, num_layers = 3, hidden_size = 256, loss = 'mse')
+    poly_data = GetPolyData(10000, 20)
+    clf = Seq2Seq(n_step = 600000, num_layers = 2, hidden_size = 256, loss = 'mse')
     clf.fit(poly_data)

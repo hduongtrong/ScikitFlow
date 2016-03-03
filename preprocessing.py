@@ -1,4 +1,4 @@
-import urllib2, numpy as np
+import urllib2, numpy as np, os
 
 class ProcessBatch():
     def __init__(self, X, Y):
@@ -75,17 +75,26 @@ def GetAdditionData(n = 10000):
     return SplitDataBatch(XX, YY)
 
 def GetPolyData(n = 10000, d = 3, seed = 1):
-    np.random.seed(seed)
+    data_path = '/scratch/users/hduong/Seq2Seq/poly_%d_%d.npz' %(n, d)
+    if os.path.exists(data_path):
+        df = np.load(data_path)
+        X = df['X']
+        Y = df['Y']
+    else:
+        np.random.seed(seed)
 
-    X = np.zeros((n, d), dtype = np.float32)
-    Y = np.zeros((n, d + 1, 2), dtype = np.float32)
+        X = np.zeros((n, d), dtype = np.float32)
+        Y = np.zeros((n, d + 1, 2), dtype = np.float32)
 
-    for i in xrange(n):
-        Y[i,1:,0] = np.sort(np.random.uniform(low = -1, high = 1, size = d))
-        Y[i,0,1]  = 1
-        X[i] = np.polynomial.polynomial.polyfromroots(Y[i,1:,0])[:-1]
-   	
-    X = X.reshape(n, d, 1)
+        for i in xrange(n):
+            if i % 1000 == 0: print(i)
+            Y[i,1:,0] = np.sort(np.random.uniform(low = -1, high = 1, size = d))
+            Y[i,0,1]  = 1
+            X[i] = np.polynomial.polynomial.polyfromroots(Y[i,1:,0])[:-1]
+            
+        X = X.reshape(n, d, 1)
+        np.savez_compressed(data_path, X = X, Y = Y)
+    
     return SplitDataBatch(X, Y)
 
 if __name__ == '_main__':
