@@ -1,35 +1,14 @@
 import ipdb, numpy as np, tensorflow as tf
 from tensorflow.python.ops import seq2seq, rnn_cell, rnn
-from preprocessing import GetAdditionData, GetPolyData
+from preprocessing import GetAdditionData, GetPolyData, GetPolyDataReal
 from utils import PrintMessage, accuracy_score, r2_score
 from tensorflow.python.ops import variable_scope
 
 
 def rnn_decoder(decoder_inputs, initial_state, cell, softmax_w, softmax_b,
                 scope=None):
-  """RNN decoder for the sequence-to-sequence model.
-  Args:
-    decoder_inputs: A list of 2D Tensors [batch_size x cell.input_size].
-    initial_state: 2D Tensor with shape [batch_size x cell.state_size].
-    cell: rnn_cell.RNNCell defining the cell function and size.
-    loop_function: If not None, this function will be applied to the i-th output
-      in order to generate the i+1-st input, and decoder_inputs will be ignored,
-      except for the first element ("GO" symbol). This can be used for decoding,
-      but also for training to emulate http://arxiv.org/abs/1506.03099.
-      Signature -- loop_function(prev, i) = next
-        * prev is a 2D Tensor of shape [batch_size x cell.output_size],
-        * i is an integer, the step number (when advanced control is needed),
-        * next is a 2D Tensor of shape [batch_size x cell.input_size].
-    scope: VariableScope for the created subgraph; defaults to "rnn_decoder".
-  Returns:
-    A tuple of the form (outputs, state), where:
-      outputs: A list of the same length as decoder_inputs of 2D Tensors with
-        shape [batch_size x cell.output_size] containing generated outputs.
-      state: The state of each cell at the final time-step.
-        It is a 2D Tensor of shape [batch_size x cell.state_size].
-        (Note that in some cases, like basic RNN cell or GRU cell, outputs and
-         states can be the same. They are different for LSTM cells though.)
-  """
+  # Currently only support Mean Squared Error. Need to support Cross Entropy
+  # By cchanging linear activation to argmax of the logits
   with variable_scope.variable_scope(scope or "rnn_decoder"):
     state_train = initial_state
     state_valid = initial_state
@@ -145,6 +124,6 @@ if __name__ == '_main__':
     clf = Seq2Seq(n_step = 100000, loss = 'ce')
     clf.fit(addition_data)
 if __name__ == '__main__':
-    poly_data = GetPolyData(100000, 20)
+    poly_data = GetPolyDataReal(100000, 20)
     clf = Seq2Seq(n_step = 600000, num_layers = 3, hidden_size = 256, loss = 'mse')
     clf.fit(poly_data)

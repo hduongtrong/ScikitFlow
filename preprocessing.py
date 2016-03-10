@@ -74,11 +74,13 @@ def GetAdditionData(n = 10000):
             YY[i][j][Y[i,j-1]] = True
     return SplitDataBatch(XX, YY)
 
-def GetPolyData(n = 10000, d = 3, seed = 1):
+def GetPolyDataReal(n = 10000, d = 3, seed = 1):
     data_path = '/scratch/users/hduong/Seq2Seq/poly_%d_%d.npz' %(n, d)
     if os.path.exists(data_path):
         df = np.load(data_path)
-        X = df['X']
+        index = np.arange(d)
+        np.random.shuffle(index)
+        X = df['X'][:,index,:]
         Y = df['Y']
     else:
         np.random.seed(seed)
@@ -93,6 +95,32 @@ def GetPolyData(n = 10000, d = 3, seed = 1):
             X[i] = np.polynomial.polynomial.polyfromroots(Y[i,1:,0])[:-1]
             
         X = X.reshape(n, d, 1)
+        np.savez_compressed(data_path, X = X, Y = Y)
+    
+    return SplitDataBatch(X, Y)
+
+def GetPolyData(n = 10000, d = 3, seed = 1):
+    data_path = '/scratch/users/hduong/Seq2Seq/poly_complex_%d_%d.npz' %(n, d)
+    if os.path.exists(data_path):
+        df = np.load(data_path)
+        X = df['X']
+        Y = df['Y']
+    else:
+        np.random.seed(seed)
+
+        X = np.zeros((n, d + 1, 2), dtype = np.float32)
+        Y = np.zeros((n, d + 1, 3), dtype = np.float32)
+
+        for i in xrange(n):
+            if i % 1000 == 0: print(i)
+            X[i,:,0] = np.random.uniform(low = -1, high = 1, size = d + 1)
+            X[i,:,1] = np.random.uniform(low = -1, high = 1, size = d + 1)
+            roots = np.roots(X[i,:,0] + X[i,:,1] * 1j)
+            roots.sort()
+            Y[i,0,-1] = 1
+            Y[i,1:,0] = roots.real
+            Y[i,1:,1] = roots.imag
+            
         np.savez_compressed(data_path, X = X, Y = Y)
     
     return SplitDataBatch(X, Y)
