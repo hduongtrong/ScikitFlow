@@ -44,6 +44,17 @@ def r2_score(yhat, labels):
     return 1 - tf.reduce_mean((yhat - labels)**2) / tf.reduce_mean((labels -
         labels_mean)**2)
 
+
+def r2_scores(labels, yhat):
+    """ When there are multiple y. This will gives Rsquared for each column of
+    y. Or the average R-Squared. Note that this is different from the R-squared    calculated by squashing the matrix into a column.
+    """
+    labels_mean = tf.reduce_mean(labels, 0, keep_dims = True)
+    mse = tf.reduce_mean((labels - yhat)**2, 0)
+    tse = tf.reduce_mean((labels - labels_mean)**2, 0)
+    r2 = 1 - mse / tse
+    return tf.reduce_mean(r2)
+
 def training(loss):
     tf.scalar_summary(loss.op.name, loss)
     optimizer = tf.train.AdamOptimizer()

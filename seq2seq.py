@@ -1,7 +1,7 @@
 import ipdb, numpy as np, tensorflow as tf
 from tensorflow.python.ops import seq2seq, rnn_cell, rnn
 from preprocessing import GetAdditionData, GetPolyData, GetPolyDataReal
-from utils import PrintMessage, accuracy_score, r2_score
+from utils import PrintMessage, accuracy_score, r2_scores
 from tensorflow.python.ops import variable_scope
 
 
@@ -45,6 +45,7 @@ class Seq2Seq():
         self.max_grad_norm  = max_grad_norm
         self.init_scale     = init_scale
         self.loss           = loss
+
     def fit(self, data_function):
         """ We make some important assumption about the data:
         The Output in additional to the original dimension, has an extra
@@ -79,9 +80,16 @@ class Seq2Seq():
             concat_outputs_val = tf.concat(0, outputs_val)
             logits = tf.matmul(concat_outputs, softmax_w) + softmax_b
             logits_val = tf.matmul(concat_outputs_val, softmax_w) + softmax_b
+            # logits has shape (batch_size x out_seq_len x out_dim)
+            logits = tf.transpose(tf.pack(tf.split(0, t - 1, logits)), 
+                    [1,0,2])
+            logits_val = tf.transpose(tf.pack(tf.split(0, t - 1, logits_val)),
+                                [1,0,2])
+             
             # labels = tf.reshape(tf.transpose(Y_pl[:,1:,:(q-1)]), [-1, 1])
-            labels = tf.reshape(tf.transpose(Y_pl[:, 1:, :], [1,0,2]),
-                    [-1, q])
+            # labels = tf.reshape(tf.transpose(Y_pl[:, 1:, :], [1,0,2]),
+            #        [-1, q])
+            labels = Y_pl[:,1:, :]
             if self.loss == 'ce':
                 loss = tf.reduce_mean(
                     tf.nn.softmax_cross_entropy_with_logits(logits, labels))
@@ -90,9 +98,9 @@ class Seq2Seq():
                 score = accuracy(logits_val, labels)
             elif self.loss == 'mse':
                 loss = tf.reduce_mean((logits - labels)**2)
-                loss_val = tf.reduce_mean((logits_val[:,:(q-1)] - 
-                                           labels[:,:(q-1)])**2)
-                # score = r2_score(logits_val, labels)
+                loss_val = tf.reduce_mean((logits_val[:,:,:(q-1)] - 
+                    labels[:,:,:(q-1)])**2)
+                score = r2_scores(labels[:,:,0], logits_val[:,:,0])
             tvars = tf.trainable_variables()
             grads, _ = tf.clip_by_global_norm(tf.gradients(loss, tvars),
                     self.max_grad_norm)
@@ -112,10 +120,13 @@ class Seq2Seq():
                     # ipdb.set_trace()
                     feed_dict = {X_pl: data_function.validation.X,
                                  Y_pl: data_function.validation.Y}
-                    loss1, loss2 = sess.run(
-                            [loss, loss_val], feed_dict = feed_dict)
+                    # loss2 is when not using previous decoder input to predict
+                    # the next decoder output. but use our prediction of
+                    # previous decoder input
+                    loss1, loss2, this_score = sess.run(
+                            [loss, loss_val, score], feed_dict = feed_dict)
                     PrintMessage(data_function.train.epochs_completed,
-                            loss1, loss2, 0) 
+                            loss1, loss2, this_score) 
     
                
 if __name__ == '_main__':

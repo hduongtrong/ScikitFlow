@@ -90,7 +90,8 @@ def GetPolyDataReal(n = 10000, d = 3, seed = 1):
 
         for i in xrange(n):
             if i % 1000 == 0: print(i)
-            Y[i,1:,0] = np.sort(np.random.uniform(low = -1, high = 1, size = d))
+            # Y[i,1:,0] = np.sort(np.random.uniform(low = -1, high = 1, size = d))
+            Y[i, 1:, 0] = np.sort(np.random.standard_normal(d))
             Y[i,0,1]  = 1
             X[i] = np.polynomial.polynomial.polyfromroots(Y[i,1:,0])[:-1]
             
