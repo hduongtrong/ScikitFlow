@@ -96,7 +96,7 @@ def GetPolyDataReal(n = 10000, d = 3, seed = 1):
             X[i] = np.polynomial.polynomial.polyfromroots(Y[i,1:,0])[:-1]
             
         X = X.reshape(n, d, 1)
-        np.savez_compressed(data_path, X = X, Y = Y)
+        # np.savez_compressed(data_path, X = X, Y = Y)
     
     return SplitDataBatch(X, Y)
 
