@@ -11,4 +11,4 @@ of polynomial coefficient to a sequence of polynomial roots. Similarly for other
 type of model, like Logistic Regression, or Vanilla Neural Network. It runs the
 model on MNIST dataset by default. 
 
-Demonstration of push and pull
+Demonstration of git
